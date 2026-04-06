@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>String Art Generator</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #f5f5f0; color: #1a1a1a; padding: 20px; }
+  h1 { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+  .subtitle { font-size: 13px; color: #666; margin-bottom: 20px; }
+  .card { background: #fff; border-radius: 12px; border: 1px solid #e5e5e5; padding: 20px; margin-bottom: 16px; }
+  .upload-zone { border: 2px dashed #ccc; border-radius: 10px; padding: 30px; text-align: center; cursor: pointer; background: #fafafa; transition: background 0.2s; }
+  .upload-zone:hover { background: #f0f0f0; }
+  .upload-zone input { display: none; }
+  .upload-zone p { font-size: 14px; color: #666; margin-top: 6px; }
+  .section-label { font-size: 11px; font-weight: 600; color: #999; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 12px; }
+  .controls-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .ctrl { display: flex; flex-direction: column; gap: 5px; }
+  .ctrl label { font-size: 13px; color: #555; }
+  .ctrl-row { display: flex; align-items: center; gap: 10px; }
+  .ctrl-row input[type=range] { flex: 1; accent-color: #1a1a1a; }
+  .ctrl-row span { font-size: 13px; font-weight: 600; min-width: 38px; text-align: right; color: #1a1a1a; }
+  .btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+  button { padding: 9px 20px; border-radius: 8px; border: 1px solid #ccc; background: #fff; color: #1a1a1a; font-size: 14px; cursor: pointer; transition: background 0.15s; }
+  button:hover { background: #f0f0f0; }
+  button.primary { background: #1a1a1a; color: #fff; border-color: transparent; }
+  button.primary:hover { background: #333; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .progress-wrap { height: 4px; background: #e5e5e5; border-radius: 2px; overflow: hidden; margin-top: 12px; display: none; }
+  .progress-bar { height: 100%; background: #1a1a1a; border-radius: 2px; transition: width 0.1s; }
+  .status { font-size: 12px; color: #888; margin-top: 8px; min-height: 18px; }
+  .canvases { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }
+  .canvas-box { border-radius: 8px; overflow: hidden; border: 1px solid #e5e5e5; background: #fff; position: relative; }
+  .canvas-box canvas { width: 100%; display: block; }
+  .canvas-label { position: absolute; top: 6px; left: 8px; font-size: 11px; color: #666; background: rgba(255,255,255,0.9); padding: 2px 7px; border-radius: 4px; border: 1px solid #e5e5e5; }
+  @media (max-width: 560px) { .controls-grid, .canvases { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<h1>String Art Generator</h1>
+<p class="subtitle">Converts any image to ultra-realistic thread art using greedy darkness subtraction.</p>
+
+<div class="card">
+  <div class="upload-zone" id="dropZone" onclick="document.getElementById('imgInput').click()">
+    <input type="file" id="imgInput" accept="image/*" onchange="handleFile(this.files[0])">
+    <div style="font-size: 28px;">🖼</div>
+    <strong style="font-size: 14px;">Drop image here or click to upload</strong>
+    <p>JPG, PNG, WEBP — max 800px internally</p>
+  </div>
+</div>
+
+<div class="card">
+  <div class="section-label">Thread parameters</div>
+  <div class="controls-grid">
+    <div class="ctrl">
+      <label>Number of threads</label>
+      <div class="ctrl-row">
+        <input type="range" min="200" max="50000" step="100" value="1500" id="numLines" oninput="upd('numLines','numLinesVal')">
+        <span id="numLinesVal">1500</span>
+      </div>
+    </div>
+    <div class="ctrl">
+      <label>Thread strength (opacity)</label>
+      <div class="ctrl-row">
+        <input type="range" min="4" max="90" step="1" value="22" id="threadStr" oninput="upd('threadStr','threadStrVal')">
+        <span id="threadStrVal">22</span>
+      </div>
+    </div>
+    <div class="ctrl">
+      <label>Min gap between points (px)</label>
+      <div class="ctrl-row">
+        <input type="range" min="5" max="300" step="5" value="30" id="minGap" oninput="upd('minGap','minGapVal')">
+        <span id="minGapVal">30</span>
+      </div>
+    </div>
+    <div class="ctrl">
+      <label>Thread thickness (px blur)</label>
+      <div class="ctrl-row">
+        <input type="range" min="0" max="5" step="0.5" value="0.5" id="threadThick" oninput="upd('threadThick','threadThickVal')">
+        <span id="threadThickVal">0.5</span>
+      </div>
+    </div>
+    <div class="ctrl">
+      <label>Pin density (grid subdivisions)</label>
+      <div class="ctrl-row">
+        <input type="range" min="1" max="50" step="2" value="20" id="pinGrid" oninput="upd('pinGrid','pinGridVal')">
+        <span id="pinGridVal">20</span>
+      </div>
+    </div>
+    <div class="ctrl">
+      <label>Edge bias strength</label>
+      <div class="ctrl-row">
+        <input type="range" min="0" max="100" step="5" value="40" id="edgeBias" oninput="upd('edgeBias','edgeBiasVal')">
+        <span id="edgeBiasVal">40</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button class="primary" id="genBtn" onclick="generate()" disabled>Generate string art</button>
+    <button id="dlBtn" onclick="downloadResult()" disabled>Download PNG</button>
+  </div>
+  <div class="progress-wrap" id="progressWrap"><div class="progress-bar" id="progressBar" style="width:0%"></div></div>
+  <div class="status" id="status">Upload an image to begin.</div>
+</div>
+
+<div class="canvases" id="canvasArea" style="display:none">
+  <div class="canvas-box">
+    <span class="canvas-label">Grayscale source</span>
+    <canvas id="srcCanvas"></canvas>
+  </div>
+  <div class="canvas-box">
+    <span class="canvas-label">String art output</span>
+    <canvas id="outCanvas"></canvas>
+  </div>
+</div>
+
+<script>
+let srcGray = null, W = 0, H = 0;
+let generating = false, cancelGen = false;
+
+function upd(id, valId) {
+  document.getElementById(valId).textContent = document.getElementById(id).value;
+}
+
+const dropZone = document.getElementById('dropZone');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.style.background = '#ebebeb'; });
+dropZone.addEventListener('dragleave', () => { dropZone.style.background = ''; });
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.style.background = '';
+  if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+
+function handleFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => { const img = new Image(); img.onload = () => loadImage(img); img.src = e.target.result; };
+  reader.readAsDataURL(file);
+}
+
+function loadImage(img) {
+  const MAX = 500;
+  let w = img.width, h = img.height;
+  if (w > MAX || h > MAX) { const s = MAX / Math.max(w, h); w = Math.round(w * s); h = Math.round(h * s); }
+  W = w; H = h;
+
+  const sc = document.getElementById('srcCanvas');
+  sc.width = w; sc.height = h;
+  const ctx = sc.getContext('2d');
+  ctx.drawImage(img, 0, 0, w, h);
+  const id = ctx.getImageData(0, 0, w, h);
+  const d = id.data;
+
+  srcGray = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) {
+    srcGray[i] = (0.299 * d[i*4] + 0.587 * d[i*4+1] + 0.114 * d[i*4+2]) / 255;
+  }
+  applyCLAHE(srcGray, w, h);
+
+  for (let i = 0; i < w * h; i++) {
+    const v = Math.round(srcGray[i] * 255);
+    d[i*4] = d[i*4+1] = d[i*4+2] = v; d[i*4+3] = 255;
+  }
+  ctx.putImageData(id, 0, 0);
+
+  const oc = document.getElementById('outCanvas');
+  oc.width = w; oc.height = h;
+
+  document.getElementById('canvasArea').style.display = 'grid';
+  document.getElementById('genBtn').disabled = false;
+  document.getElementById('status').textContent = 'Image loaded — adjust parameters and generate.';
+}
+
+function applyCLAHE(gray, w, h) {
+  const N = w * h;
+  const hist = new Int32Array(256);
+  for (let i = 0; i < N; i++) hist[Math.min(255, Math.floor(gray[i] * 255))]++;
+  const limit = Math.max(1, Math.floor(N / 128));
+  let excess = 0;
+  for (let i = 0; i < 256; i++) { if (hist[i] > limit) { excess += hist[i] - limit; hist[i] = limit; } }
+  const add = Math.floor(excess / 256);
+  for (let i = 0; i < 256; i++) hist[i] += add;
+  const cdf = new Float32Array(256);
+  cdf[0] = hist[0];
+  for (let i = 1; i < 256; i++) cdf[i] = cdf[i-1] + hist[i];
+  const cdfMin = cdf[0];
+  for (let i = 0; i < N; i++) {
+    const bin = Math.min(255, Math.floor(gray[i] * 255));
+    gray[i] = Math.max(0, Math.min(1, (cdf[bin] - cdfMin) / (N - cdfMin)));
+  }
+}
+
+function bresenham(x0, y0, x1, y1) {
+  const pts = [];
+  const dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0);
+  const sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+  let err = dx - dy;
+  while (true) {
+    pts.push(x0, y0);
+    if (x0 === x1 && y0 === y1) break;
+    const e2 = 2 * err;
+    if (e2 > -dy) { err -= dy; x0 += sx; }
+    if (e2 < dx) { err += dx; y0 += sy; }
+  }
+  return pts;
+}
+
+function computeEdgeMap(gray, w, h) {
+  const edges = new Float32Array(w * h);
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const gx = -gray[(y-1)*w+(x-1)] + gray[(y-1)*w+(x+1)]
+                 - 2*gray[y*w+(x-1)] + 2*gray[y*w+(x+1)]
+                 - gray[(y+1)*w+(x-1)] + gray[(y+1)*w+(x+1)];
+      const gy = -gray[(y-1)*w+(x-1)] - 2*gray[(y-1)*w+x] - gray[(y-1)*w+(x+1)]
+                 + gray[(y+1)*w+(x-1)] + 2*gray[(y+1)*w+x] + gray[(y+1)*w+(x+1)];
+      edges[y*w+x] = Math.min(1, Math.sqrt(gx*gx + gy*gy));
+    }
+  }
+  return edges;
+}
+
+async function generate() {
+  if (!srcGray || generating) return;
+  cancelGen = false; generating = true;
+  document.getElementById('genBtn').textContent = 'Cancel';
+  document.getElementById('genBtn').onclick = () => { cancelGen = true; };
+  document.getElementById('dlBtn').disabled = true;
+
+  const numLines = parseInt(document.getElementById('numLines').value);
+  const threadStr = parseInt(document.getElementById('threadStr').value) / 255;
+  const minGap = parseInt(document.getElementById('minGap').value);
+  const threadThick = parseFloat(document.getElementById('threadThick').value);
+  const pinGrid = parseInt(document.getElementById('pinGrid').value);
+  const edgeBias = parseInt(document.getElementById('edgeBias').value) / 100;
+
+  const progressWrap = document.getElementById('progressWrap');
+  const progressBar = document.getElementById('progressBar');
+  const status = document.getElementById('status');
+  progressWrap.style.display = 'block';
+  progressBar.style.width = '0%';
+
+  await new Promise(r => setTimeout(r, 10));
+
+  const edgeMap = computeEdgeMap(srcGray, W, H);
+
+  const residual = new Float32Array(W * H);
+  for (let i = 0; i < W * H; i++) residual[i] = 1 - srcGray[i];
+
+  // Build pins: regular grid + edge-biased extras
+  const pins = [];
+  const stepX = Math.max(1, Math.floor(W / pinGrid));
+  const stepY = Math.max(1, Math.floor(H / pinGrid));
+  for (let y = Math.floor(stepY / 2); y < H; y += stepY) {
+    for (let x = Math.floor(stepX / 2); x < W; x += stepX) {
+      const e = edgeMap[y * W + x];
+      if (Math.random() < 0.25 + edgeBias * e * 0.75) pins.push(x, y);
+      // random extra pins around edges
+      if (e > 0.3 && Math.random() < edgeBias * 0.5) {
+        const nx = Math.max(0, Math.min(W-1, x + Math.round((Math.random()-0.5)*stepX)));
+        const ny = Math.max(0, Math.min(H-1, y + Math.round((Math.random()-0.5)*stepY)));
+        pins.push(nx, ny);
+      }
+    }
+  }
+
+  const pinCount = pins.length / 2;
+  if (pinCount < 2) {
+    status.textContent = 'Too few pins — reduce pin density or increase edge bias.';
+    finishGen(); return;
+  }
+
+  const oc = document.getElementById('outCanvas');
+  oc.width = W; oc.height = H;
+  const ctx = oc.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, W, H);
+
+  const BATCH = 30;
+  let drawn = 0;
+  const TRIES = Math.min(600, pinCount * (pinCount - 1));
+
+  while (drawn < numLines && !cancelGen) {
+    const batchEnd = Math.min(drawn + BATCH, numLines);
+
+    for (let li = drawn; li < batchEnd && !cancelGen; li++) {
+      let bestScore = -Infinity, bi = -1, bj = -1;
+
+      for (let t = 0; t < TRIES; t++) {
+        const i = Math.floor(Math.random() * pinCount);
+        const j = Math.floor(Math.random() * pinCount);
+        if (i === j) continue;
+        const x0 = pins[i*2], y0 = pins[i*2+1];
+        const x1 = pins[j*2], y1 = pins[j*2+1];
+        const dist = Math.sqrt((x1-x0)**2 + (y1-y0)**2);
+        if (dist < minGap) continue;
+
+        // Quick approximate score using sampled points
+        const steps = Math.min(20, Math.floor(dist));
+        let score = 0;
+        for (let s = 0; s <= steps; s++) {
+          const t2 = s / Math.max(1, steps);
+          const px = Math.round(x0 + (x1-x0)*t2);
+          const py = Math.round(y0 + (y1-y0)*t2);
+          if (px >= 0 && px < W && py >= 0 && py < H) score += residual[py*W+px];
+        }
+        score /= (steps + 1);
+
+        if (score > bestScore) { bestScore = score; bi = i; bj = j; }
+      }
+
+      if (bi < 0 || bestScore <= 0.01) continue;
+
+      const x0 = pins[bi*2], y0 = pins[bi*2+1];
+      const x1 = pins[bj*2], y1 = pins[bj*2+1];
+
+      ctx.save();
+      ctx.globalAlpha = threadStr;
+      if (threadThick > 0) ctx.filter = `blur(${threadThick}px)`;
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = Math.max(0.3, threadThick > 0 ? 0.6 : 0.4);
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.lineTo(x1, y1);
+      ctx.stroke();
+      ctx.restore();
+
+      // Subtract from residual using Bresenham
+      const pts = bresenham(x0, y0, x1, y1);
+      const sub = threadStr * 0.55;
+      for (let k = 0; k < pts.length; k += 2) {
+        const px = pts[k], py = pts[k+1];
+        if (px >= 0 && px < W && py >= 0 && py < H) {
+          residual[py*W+px] = Math.max(0, residual[py*W+px] - sub);
+        }
+      }
+    }
+
+    drawn = batchEnd;
+    progressBar.style.width = Math.round((drawn / numLines) * 100) + '%';
+    status.textContent = `Drawing thread ${drawn} of ${numLines}...`;
+    await new Promise(r => setTimeout(r, 0));
+  }
+
+  progressBar.style.width = '100%';
+  status.textContent = cancelGen
+    ? `Cancelled — ${drawn} threads drawn.`
+    : `Done! ${drawn} threads woven. Download or regenerate with new settings.`;
+  progressWrap.style.display = 'none';
+  document.getElementById('dlBtn').disabled = false;
+  finishGen();
+}
+
+function finishGen() {
+  generating = false; cancelGen = false;
+  document.getElementById('genBtn').textContent = 'Generate string art';
+  document.getElementById('genBtn').onclick = generate;
+  document.getElementById('genBtn').disabled = false;
+}
+
+function downloadResult() {
+  const oc = document.getElementById('outCanvas');
+  const a = document.createElement('a');
+  a.download = 'string_art.png';
+  a.href = oc.toDataURL('image/png');
+  a.click();
+}
+</script>
+</body>
+</html>
